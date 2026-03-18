@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { supabaseForUser } from "../db/supabase.js";
+import type { AppEnv } from "../types.js";
 
-const tickets = new Hono();
+const tickets = new Hono<AppEnv>();
 
 // ─── LIST ALL TICKETS ──────────────────────────────────────
 tickets.get("/", async (c) => {

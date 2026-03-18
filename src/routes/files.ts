@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import { supabaseForUser, supabaseAdmin } from "../db/supabase.js";
 import archiver from "archiver";
 import { Readable } from "stream";
+import type { AppEnv } from "../types.js";
 
-const files = new Hono();
+const files = new Hono<AppEnv>();
 
 const BUCKET = "ticket-attachments";
 

@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { supabaseForUser } from "../db/supabase.js";
+import type { AppEnv } from "../types.js";
 
-const users = new Hono();
+const users = new Hono<AppEnv>();
 
 // ─── LIST ALL PROFILES ─────────────────────────────────────
 users.get("/", async (c) => {
