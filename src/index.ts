@@ -3,10 +3,10 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
-import { authMiddleware } from "./middleware/auth.js";
-import ticketRoutes from "./routes/tickets.js";
-import fileRoutes from "./routes/files.js";
-import userRoutes from "./routes/users.js";
+import { authMiddleware } from "./middleware/auth";
+import ticketRoutes from "./routes/tickets";
+import fileRoutes from "./routes/files";
+import userRoutes from "./routes/users";
 
 const app = new Hono();
 

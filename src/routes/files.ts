@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { supabaseForUser, supabaseAdmin } from "../db/supabase.js";
+import { supabaseForUser, supabaseAdmin } from "../db/supabase";
 import archiver from "archiver";
 import { Readable } from "stream";
-import type { AppEnv } from "../types.js";
+import type { AppEnv } from "../types";
 
 const files = new Hono<AppEnv>();
 

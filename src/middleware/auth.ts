@@ -1,5 +1,5 @@
 import { Context, Next } from "hono";
-import { supabaseAdmin } from "../db/supabase.js";
+import { supabaseAdmin } from "../db/supabase";
 
 export async function authMiddleware(c: Context, next: Next) {
   const authHeader = c.req.header("Authorization");

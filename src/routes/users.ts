@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { supabaseForUser } from "../db/supabase.js";
-import type { AppEnv } from "../types.js";
+import { supabaseForUser } from "../db/supabase";
+import type { AppEnv } from "../types";
 
 const users = new Hono<AppEnv>();
 
