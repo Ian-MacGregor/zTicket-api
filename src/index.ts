@@ -17,7 +17,7 @@ app.use(
   cors({
     // In production, restrict to your GitHub Pages domain:
     //   origin: "https://yourorg.github.io"
-    origin: "*",
+    origin: "https://ian-macgregor.github.io/zTicket/",
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["Content-Disposition"],
