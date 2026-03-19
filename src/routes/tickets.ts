@@ -63,7 +63,7 @@ tickets.post("/", async (c) => {
       title: body.title,
       description: body.description,
       priority: body.priority || "medium",
-      status: body.status || "assigned",
+      status: body.status || "unassigned",
       assigned_to: body.assigned_to,
       reviewer: body.reviewer,
       client_id: body.client_id || null,

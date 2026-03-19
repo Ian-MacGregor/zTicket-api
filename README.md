@@ -36,7 +36,7 @@ All `/api/*` routes require an `Authorization: Bearer <supabase_access_token>` h
 
 Ticket responses include joined data for `assignee`, `reviewer`, `creator`, `client`, and `files`.
 
-**Ticket fields:** title, description, priority (`low`/`medium`/`high`/`critical`), status (`assigned`/`review`/`complete`/`sent`), assigned_to, reviewer, client_id, gmail_links, quoted_time, quoted_price, quoted_amf, comments.
+**Ticket fields:** title, description, priority (`low`/`medium`/`high`/`critical`), status (`unassigned`/`reserved`/`assigned`/`review`/`complete`/`sent`), assigned_to, reviewer, client_id, gmail_links, quoted_time, quoted_price, quoted_amf, comments. Default status is `unassigned`.
 
 ### Files
 
@@ -123,11 +123,13 @@ zTicket-api/
 1. Create a Supabase project at [supabase.com](https://supabase.com).
 2. Run `database/schema.sql` in the SQL Editor. This creates all base tables, triggers, enums, and RLS policies.
 3. Run each file in `database/migrations/` in order:
-   - `add_ref_number.sql`
-   - `add_clients.sql`
-   - `add_colors.sql`
-   - `colors_per_user.sql`
-   - `add_ticket_fields.sql`
+   - `001_add_ref_number.sql`
+   - `002_add_clients.sql`
+   - `003_add_colors.sql`
+   - `004_colors_per_user.sql`
+   - `005_add_ticket_fields.sql`
+   - `006_add_statuses.sql` — adds `unassigned` and `reserved` enum values
+   - `007_update_default_status.sql` — sets `unassigned` as the default status (must be run separately after 006, as PostgreSQL requires new enum values to be committed before they can be referenced)
 4. Create a storage bucket named `ticket-attachments` (private) and add RLS policies for authenticated users (SELECT, INSERT, DELETE).
 5. Add allowed email addresses to the `allowed_emails` table.
 
