@@ -7,16 +7,18 @@ const colors = new Hono<AppEnv>();
 // ─── GET COLOR SETTINGS ────────────────────────────────────
 colors.get("/", async (c) => {
   const token = c.get("token") as string;
+  const user = c.get("user") as { id: string };
   const sb = supabaseForUser(token);
 
   const { data, error } = await sb
     .from("color_settings")
     .select("*")
-    .eq("id", "global")
-    .single();
+    .eq("id", user.id)
+    .maybeSingle();
 
   if (error) return c.json({ error: error.message }, 500);
-  return c.json(data);
+  // Return empty settings if no row yet
+  return c.json(data || { id: user.id, settings: {} });
 });
 
 // ─── UPDATE COLOR SETTINGS ─────────────────────────────────
@@ -28,12 +30,12 @@ colors.patch("/", async (c) => {
 
   const { data, error } = await sb
     .from("color_settings")
-    .update({
+    .upsert({
+      id: user.id,
       settings: body.settings,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", "global")
     .select()
     .single();
 
