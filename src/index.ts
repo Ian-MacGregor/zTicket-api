@@ -7,6 +7,7 @@ import { authMiddleware } from "./middleware/auth";
 import ticketRoutes from "./routes/tickets";
 import fileRoutes from "./routes/files";
 import userRoutes from "./routes/users";
+import clientRoutes from "./routes/clients";
 
 const app = new Hono();
 
@@ -15,9 +16,7 @@ app.use("*", logger());
 app.use(
   "*",
   cors({
-    // In production, restrict to your GitHub Pages domain:
-    //   origin: "https://yourorg.github.io"
-    origin: "https://ian-macgregor.github.io",
+    origin: ["https://ian-macgregor.github.io"],
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["Content-Disposition"],
@@ -33,6 +32,7 @@ app.use("/api/*", authMiddleware);
 app.route("/api/tickets", ticketRoutes);
 app.route("/api/tickets", fileRoutes);       // nested under /api/tickets/:ticketId/files
 app.route("/api/users", userRoutes);
+app.route("/api/clients", clientRoutes);
 
 // ─── START SERVER ───────────────────────────────────────────
 const port = parseInt(process.env.PORT || "3000", 10);

@@ -4,6 +4,23 @@ import type { AppEnv } from "../types";
 
 const tickets = new Hono<AppEnv>();
 
+const TICKET_SELECT = `
+  *,
+  assignee:assigned_to ( id, email, full_name ),
+  reviewer:reviewer    ( id, email, full_name ),
+  creator:created_by   ( id, email, full_name ),
+  client:client_id     ( id, name ),
+  files:ticket_files   ( id, file_name, file_path, file_size, mime_type, created_at )
+`;
+
+const TICKET_SELECT_NO_FILES = `
+  *,
+  assignee:assigned_to ( id, email, full_name ),
+  reviewer:reviewer    ( id, email, full_name ),
+  creator:created_by   ( id, email, full_name ),
+  client:client_id     ( id, name )
+`;
+
 // ─── LIST ALL TICKETS ──────────────────────────────────────
 tickets.get("/", async (c) => {
   const token = c.get("token") as string;
@@ -11,15 +28,7 @@ tickets.get("/", async (c) => {
 
   const { data, error } = await sb
     .from("tickets")
-    .select(
-      `
-      *,
-      assignee:assigned_to ( id, email, full_name ),
-      reviewer:reviewer    ( id, email, full_name ),
-      creator:created_by   ( id, email, full_name ),
-      files:ticket_files   ( id, file_name, file_path, file_size, mime_type, created_at )
-    `
-    )
+    .select(TICKET_SELECT)
     .order("created_at", { ascending: false });
 
   if (error) return c.json({ error: error.message }, 500);
@@ -33,15 +42,7 @@ tickets.get("/:id", async (c) => {
 
   const { data, error } = await sb
     .from("tickets")
-    .select(
-      `
-      *,
-      assignee:assigned_to ( id, email, full_name ),
-      reviewer:reviewer    ( id, email, full_name ),
-      creator:created_by   ( id, email, full_name ),
-      files:ticket_files   ( id, file_name, file_path, file_size, mime_type, created_at )
-    `
-    )
+    .select(TICKET_SELECT)
     .eq("id", c.req.param("id"))
     .single();
 
@@ -65,17 +66,11 @@ tickets.post("/", async (c) => {
       status: body.status || "assigned",
       assigned_to: body.assigned_to,
       reviewer: body.reviewer,
+      client_id: body.client_id || null,
       gmail_links: body.gmail_links || [],
       created_by: user.id,
     })
-    .select(
-      `
-      *,
-      assignee:assigned_to ( id, email, full_name ),
-      reviewer:reviewer    ( id, email, full_name ),
-      creator:created_by   ( id, email, full_name )
-    `
-    )
+    .select(TICKET_SELECT_NO_FILES)
     .single();
 
   if (error) return c.json({ error: error.message }, 400);
@@ -96,6 +91,7 @@ tickets.patch("/:id", async (c) => {
     "status",
     "assigned_to",
     "reviewer",
+    "client_id",
     "gmail_links",
   ];
 
@@ -107,15 +103,7 @@ tickets.patch("/:id", async (c) => {
     .from("tickets")
     .update(updateFields)
     .eq("id", c.req.param("id"))
-    .select(
-      `
-      *,
-      assignee:assigned_to ( id, email, full_name ),
-      reviewer:reviewer    ( id, email, full_name ),
-      creator:created_by   ( id, email, full_name ),
-      files:ticket_files   ( id, file_name, file_path, file_size, mime_type, created_at )
-    `
-    )
+    .select(TICKET_SELECT)
     .single();
 
   if (error) return c.json({ error: error.message }, 400);
