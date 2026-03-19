@@ -68,6 +68,10 @@ tickets.post("/", async (c) => {
       reviewer: body.reviewer,
       client_id: body.client_id || null,
       gmail_links: body.gmail_links || [],
+      quoted_time: body.quoted_time || null,
+      quoted_price: body.quoted_price || null,
+      quoted_amf: body.quoted_amf || null,
+      comments: body.comments || null,
       created_by: user.id,
     })
     .select(TICKET_SELECT_NO_FILES)
@@ -93,6 +97,10 @@ tickets.patch("/:id", async (c) => {
     "reviewer",
     "client_id",
     "gmail_links",
+    "quoted_time",
+    "quoted_price",
+    "quoted_amf",
+    "comments",
   ];
 
   for (const field of allowedFields) {
