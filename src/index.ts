@@ -8,6 +8,7 @@ import ticketRoutes from "./routes/tickets";
 import fileRoutes from "./routes/files";
 import userRoutes from "./routes/users";
 import clientRoutes from "./routes/clients";
+import colorRoutes from "./routes/colors";
 
 const app = new Hono();
 
@@ -33,6 +34,7 @@ app.route("/api/tickets", ticketRoutes);
 app.route("/api/tickets", fileRoutes);       // nested under /api/tickets/:ticketId/files
 app.route("/api/users", userRoutes);
 app.route("/api/clients", clientRoutes);
+app.route("/api/colors", colorRoutes);
 
 // ─── START SERVER ───────────────────────────────────────────
 const port = parseInt(process.env.PORT || "3000", 10);
