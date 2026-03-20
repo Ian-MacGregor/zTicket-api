@@ -132,6 +132,7 @@ zTicket-api/
    - `007_update_default_status.sql` — sets `unassigned` as the default status (must be run separately after 006, as PostgreSQL requires new enum values to be committed before they can be referenced)
    - `008_tickets_delete_policy.sql` — adds missing DELETE RLS policy for the tickets table
    - `009_add_wait_hold.sql` — renames `reserved` enum value to `wait_hold` and adds `wait_hold_reason` column
+   - `010_add_status_updated_at.sql` — adds `status_updated_at` column; trigger updated to stamp it on every status change
 4. Create a storage bucket named `ticket-attachments` (private) and add RLS policies for authenticated users (SELECT, INSERT, DELETE).
 5. Add allowed email addresses to the `allowed_emails` table.
 
