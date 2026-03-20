@@ -13,7 +13,9 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 async function logActivity(sb: any, ticketId: string, userId: string, action: string) {
-  await sb.from("ticket_activity").insert({ ticket_id: ticketId, user_id: userId, action }).catch(() => {});
+  try {
+    await sb.from("ticket_activity").insert({ ticket_id: ticketId, user_id: userId, action });
+  } catch {}
 }
 
 const TICKET_SELECT = `

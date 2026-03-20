@@ -38,9 +38,10 @@ comments.post("/:ticketId/comments", async (c) => {
     .single();
 
   if (error) return c.json({ error: error.message }, 400);
-  await sb.from("ticket_activity")
-    .insert({ ticket_id: c.req.param("ticketId"), user_id: user.id, action: "added a comment" })
-    .catch(() => {});
+  try {
+    await sb.from("ticket_activity")
+      .insert({ ticket_id: c.req.param("ticketId"), user_id: user.id, action: "added a comment" });
+  } catch {}
   return c.json(data, 201);
 });
 
