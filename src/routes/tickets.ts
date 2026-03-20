@@ -208,7 +208,6 @@ tickets.post("/", async (c) => {
       quoted_time: body.quoted_time || null,
       quoted_price: body.quoted_price || null,
       quoted_amf: body.quoted_amf || null,
-      comments: body.comments || null,
       created_by: user.id,
     })
     .select(TICKET_SELECT_NO_FILES)
@@ -238,7 +237,6 @@ tickets.patch("/:id", async (c) => {
     "quoted_time",
     "quoted_price",
     "quoted_amf",
-    "comments",
     "wait_hold_reason",
   ];
 
