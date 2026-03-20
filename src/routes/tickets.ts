@@ -58,7 +58,11 @@ tickets.get("/", async (c) => {
   let query = sb.from("tickets").select(TICKET_SELECT, { count: "exact" });
 
   // ── Status filter ──────────────────────────────────────
-  if (status !== "all") query = query.eq("status", status);
+  if (status !== "all") {
+    const statuses = status.split(",").map((s) => s.trim()).filter(Boolean);
+    if (statuses.length === 1) query = query.eq("status", statuses[0]);
+    else query = query.in("status", statuses);
+  }
 
   // ── Priority filter ────────────────────────────────────
   if (priority !== "all") query = query.eq("priority", priority);
