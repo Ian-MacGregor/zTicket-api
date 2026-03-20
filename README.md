@@ -1,6 +1,6 @@
 # zTicket API
 
-REST API for the zTicket internal ticketing system. Built with Hono on Node.js, backed by Supabase (PostgreSQL, Auth, Storage). Deployed to Railway.
+REST API for the zTicket internal ticketing system. Built with Hono on Node.js, backed by Supabase (PostgreSQL, Auth, Storage). Deployed to Railway. This repo includes the SQL used to set up the Supabase database for this project in the "database" directory even though this Railway deployment does not directly utilize these scripts (just to avoid having a separate repo just hosting SQL schema and migrations).
 
 ---
 
