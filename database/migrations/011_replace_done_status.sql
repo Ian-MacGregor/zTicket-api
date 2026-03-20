@@ -6,6 +6,9 @@
 -- Release the enum dependency so we can drop and recreate it
 ALTER TABLE tickets ALTER COLUMN status TYPE text;
 
+-- Drop the default too — it still references the enum type
+ALTER TABLE tickets ALTER COLUMN status DROP DEFAULT;
+
 -- Migrate existing data
 UPDATE tickets SET status = 'done' WHERE status IN ('complete', 'sent');
 
