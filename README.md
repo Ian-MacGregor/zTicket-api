@@ -35,7 +35,7 @@ All `/api/*` routes require an `Authorization: Bearer <supabase_access_token>` h
 | GET    | `/api/tickets/:id`    | Get single ticket                        |
 | POST   | `/api/tickets`        | Create ticket                            |
 | PATCH  | `/api/tickets/:id`    | Update ticket                            |
-| DELETE | `/api/tickets/:id`    | Delete ticket                            |
+| DELETE | `/api/tickets/:id`    | Delete ticket (cascades to comments, files, activity) |
 
 Ticket responses include joined data for `assignee`, `reviewer`, `creator`, `client`, and `files`.
 
@@ -48,7 +48,7 @@ Ticket responses include joined data for `assignee`, `reviewer`, `creator`, `cli
 | `page`       | `1`           | Page number                                                   |
 | `limit`      | `10`          | Results per page (max 200)                                    |
 | `sort`       | `ref-desc`    | Sort key: `ref`, `title`, `status`, `priority`, `created`, `updated`, `client`, `owner` — each with `-asc` or `-desc` suffix |
-| `status`     | `all`         | Filter by status enum value, or `all`                         |
+| `status`     | `all`         | Filter by status value, `all`, or comma-separated values (e.g. `assigned,review`) |
 | `priority`   | `all`         | Filter by priority enum value, or `all`                       |
 | `client`     | `all`         | Filter by client UUID, or `all`                               |
 | `view`       | `all`         | `my-tickets` or `my-reviews` (requires `userId`)             |
@@ -58,7 +58,19 @@ Ticket responses include joined data for `assignee`, `reviewer`, `creator`, `cli
 
 Response shape: `{ data: Ticket[], total: number }` where `total` is the untruncated filtered count (for pagination).
 
-**Ticket fields:** title, description, priority (`low`/`medium`/`high`/`critical`), status (`unassigned`/`wait_hold`/`assigned`/`review`/`done`), assigned_to, reviewer, client_id, gmail_links, quote_required, quoted_time, quoted_price, quoted_amf, comments, wait_hold_reason. Default status is `unassigned`.
+**Ticket fields:** title, description, priority (`low`/`medium`/`high`/`critical`), status (`unassigned`/`wait_hold`/`assigned`/`review`/`done`), assigned_to, reviewer, client_id, gmail_links, quote_required, quoted_time, quoted_price, quoted_amf, wait_hold_reason. Default status is `unassigned`.
+
+### Comments
+
+Forum-style per-user comments on tickets. Only the comment author can edit their own comment (enforced by RLS). Deleting a ticket cascades and removes all its comments.
+
+| Method | Path                                        | Description                        |
+|--------|---------------------------------------------|------------------------------------|
+| GET    | `/api/tickets/:id/comments`                 | List all comments for a ticket     |
+| POST   | `/api/tickets/:id/comments`                 | Add a comment                      |
+| PATCH  | `/api/tickets/:id/comments/:commentId`      | Edit own comment (RLS enforced)    |
+
+Comment responses include joined `author` data (`id`, `email`, `full_name`). Comments are ordered oldest-first.
 
 ### Files
 
@@ -103,6 +115,14 @@ Client responses include nested `contacts` array.
 
 Color settings are per-user. The PATCH endpoint uses upsert, so no row needs to exist beforehand.
 
+### Activity
+
+| Method | Path            | Description                                      |
+|--------|-----------------|--------------------------------------------------|
+| GET    | `/api/activity` | Returns the 5 most recent ticket activity events |
+
+Response includes joined `ticket` (`ref_number`) and `actor` (`full_name`, `email`) data. Activity is logged automatically by the API on ticket create, ticket update, and comment create. Example action strings: `"created ticket"`, `"set status to \"Review\""`, `"added a comment"`, `"edited ticket"`.
+
 ---
 
 ## Project Structure
@@ -117,19 +137,30 @@ zTicket-api/
 │   ├── middleware/
 │   │   └── auth.ts           # JWT verification middleware
 │   └── routes/
-│       ├── tickets.ts        # Ticket CRUD
+│       ├── tickets.ts        # Ticket CRUD + activity logging
+│       ├── comments.ts       # Forum-style per-user comments
 │       ├── files.ts          # File upload, download, zip, delete
 │       ├── users.ts          # User profile listing
 │       ├── clients.ts        # Client + contact CRUD
-│       └── colors.ts         # Per-user color settings
+│       ├── colors.ts         # Per-user color settings
+│       └── activity.ts       # Activity feed (recent 5 events)
 ├── database/
 │   ├── schema.sql            # Initial database schema (run first)
 │   └── migrations/
-│       ├── add_ref_number.sql    # Auto-incrementing ticket reference numbers
-│       ├── add_clients.sql       # Clients and contacts tables
-│       ├── add_colors.sql        # Color settings table (initial)
-│       ├── colors_per_user.sql   # Convert colors to per-user with RLS
-│       └── add_ticket_fields.sql # Quoted time/price/AMF and comments
+│       ├── 001_add_ref_number.sql
+│       ├── 002_add_clients.sql
+│       ├── 003_add_colors.sql
+│       ├── 004_colors_per_user.sql
+│       ├── 005_add_ticket_fields.sql
+│       ├── 006_add_statuses.sql
+│       ├── 007_update_default_status.sql
+│       ├── 008_tickets_delete_policy.sql
+│       ├── 009_add_wait_hold.sql
+│       ├── 010_add_status_updated_at.sql
+│       ├── 011_replace_done_status.sql
+│       ├── 012_add_quote_required.sql
+│       ├── 013_add_ticket_comments.sql
+│       └── 014_add_ticket_activity.sql
 ├── Dockerfile
 ├── tsconfig.json
 ├── package.json
@@ -144,47 +175,52 @@ zTicket-api/
 
 1. Create a Supabase project at [supabase.com](https://supabase.com).
 2. Run `database/schema.sql` in the SQL Editor. This creates all base tables, triggers, enums, and RLS policies.
-3. Run each file in `database/migrations/` in order:
-   - `001_add_ref_number.sql`
-   - `002_add_clients.sql`
-   - `003_add_colors.sql`
-   - `004_colors_per_user.sql`
-   - `005_add_ticket_fields.sql`
+3. Run each file in `database/migrations/` in numerical order:
+   - `001_add_ref_number.sql` — auto-incrementing ticket reference numbers
+   - `002_add_clients.sql` — clients and contacts tables
+   - `003_add_colors.sql` — color settings table (initial)
+   - `004_colors_per_user.sql` — convert colors to per-user with RLS
+   - `005_add_ticket_fields.sql` — quoted time/price/AMF fields
    - `006_add_statuses.sql` — adds `unassigned` and `reserved` enum values
    - `007_update_default_status.sql` — sets `unassigned` as the default status (must be run separately after 006, as PostgreSQL requires new enum values to be committed before they can be referenced)
    - `008_tickets_delete_policy.sql` — adds missing DELETE RLS policy for the tickets table
-   - `009_add_wait_hold.sql` — renames `reserved` enum value to `wait_hold` and adds `wait_hold_reason` column
-   - `010_add_status_updated_at.sql` — adds `status_updated_at` column; trigger updated to stamp it on every status change
-   - `011_replace_done_status.sql` — replaces `complete` and `sent` with a single `done` status; migrates existing data. **Note:** run `ALTER TABLE tickets ALTER COLUMN status DROP DEFAULT;` before dropping the type if your Supabase instance errors on `DROP TYPE`.
+   - `009_add_wait_hold.sql` — renames `reserved` to `wait_hold` and adds `wait_hold_reason` column
+   - `010_add_status_updated_at.sql` — adds `status_updated_at` column; trigger stamps it on every status change
+   - `011_replace_done_status.sql` — replaces `complete` and `sent` with a single `done` status; migrates existing data. **Note:** run `ALTER TABLE tickets ALTER COLUMN status DROP DEFAULT;` before dropping the type if Supabase errors on `DROP TYPE`.
    - `012_add_quote_required.sql` — adds `quote_required boolean NOT NULL DEFAULT false` column to tickets
+   - `013_add_ticket_comments.sql` — creates `ticket_comments` table with RLS; migrates any existing `tickets.comments` text into comment rows attributed to the ticket creator; drops the old `comments` column
+   - `014_add_ticket_activity.sql` — creates `ticket_activity` table with RLS for the activity feed
 4. Create a storage bucket named `ticket-attachments` (private) and add RLS policies for authenticated users (SELECT, INSERT, DELETE).
 5. Add allowed email addresses to the `allowed_emails` table.
 
 ### Key Tables
 
-| Table              | Purpose                                      |
-|--------------------|----------------------------------------------|
-| `allowed_emails`   | Email allowlist for registration              |
-| `profiles`         | User profiles (auto-created on signup)        |
-| `tickets`          | All ticket data                               |
-| `ticket_files`     | File attachment metadata                      |
-| `clients`          | Client companies                              |
-| `client_contacts`  | Contacts per client                           |
-| `color_settings`   | Per-user color customization (JSON blob)      |
+| Table              | Purpose                                                    |
+|--------------------|------------------------------------------------------------|
+| `allowed_emails`   | Email allowlist for registration                           |
+| `profiles`         | User profiles (auto-created on signup)                     |
+| `tickets`          | All ticket data                                            |
+| `ticket_files`     | File attachment metadata                                   |
+| `ticket_comments`  | Forum-style per-user comments; cascades on ticket delete   |
+| `ticket_activity`  | Activity log for the dashboard feed; cascades on ticket delete |
+| `clients`          | Client companies                                           |
+| `client_contacts`  | Contacts per client                                        |
+| `color_settings`   | Per-user color customization (JSON blob)                   |
 
 ### Triggers
 
-| Trigger                 | Fires on              | Purpose                                           |
-|-------------------------|-----------------------|---------------------------------------------------|
-| `enforce_allowed_email` | `auth.users` INSERT   | Blocks signups from non-allowlisted emails        |
-| `on_auth_user_created`  | `auth.users` INSERT   | Auto-creates a profile row                        |
-| `tickets_updated_at`    | `tickets` UPDATE      | Sets `updated_at` to `now()`                      |
-| `tickets_status_dates`  | `tickets` UPDATE      | Auto-sets `date_completed` and `date_sent`        |
-| `clients_updated_at`    | `clients` UPDATE      | Sets `updated_at` to `now()`                      |
+| Trigger                       | Fires on                   | Purpose                                            |
+|-------------------------------|----------------------------|----------------------------------------------------|
+| `enforce_allowed_email`       | `auth.users` INSERT        | Blocks signups from non-allowlisted emails         |
+| `on_auth_user_created`        | `auth.users` INSERT        | Auto-creates a profile row                         |
+| `tickets_updated_at`          | `tickets` UPDATE           | Sets `updated_at` to `now()`                       |
+| `tickets_status_dates`        | `tickets` UPDATE           | Auto-sets `date_completed` and `status_updated_at` |
+| `clients_updated_at`          | `clients` UPDATE           | Sets `updated_at` to `now()`                       |
+| `ticket_comments_updated_at`  | `ticket_comments` UPDATE   | Sets `updated_at` to `now()`                       |
 
 ### Row-Level Security
 
-All tables have RLS enabled. Authenticated users can read all tickets, clients, and profiles. Users can only read/write their own color settings. File and ticket mutations are open to all authenticated users.
+All tables have RLS enabled. Authenticated users can read all tickets, clients, profiles, comments, and activity. Users can only edit/delete their own comments (enforced via `user_id = auth.uid()`). Users can only read/write their own color settings. File and ticket mutations are open to all authenticated users.
 
 ---
 
