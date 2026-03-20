@@ -101,6 +101,7 @@ tickets.patch("/:id", async (c) => {
     "quoted_price",
     "quoted_amf",
     "comments",
+    "wait_hold_reason",
   ];
 
   for (const field of allowedFields) {
