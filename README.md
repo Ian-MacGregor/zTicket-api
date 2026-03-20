@@ -36,7 +36,7 @@ All `/api/*` routes require an `Authorization: Bearer <supabase_access_token>` h
 
 Ticket responses include joined data for `assignee`, `reviewer`, `creator`, `client`, and `files`.
 
-**Ticket fields:** title, description, priority (`low`/`medium`/`high`/`critical`), status (`unassigned`/`reserved`/`assigned`/`review`/`complete`/`sent`), assigned_to, reviewer, client_id, gmail_links, quoted_time, quoted_price, quoted_amf, comments. Default status is `unassigned`.
+**Ticket fields:** title, description, priority (`low`/`medium`/`high`/`critical`), status (`unassigned`/`wait_hold`/`assigned`/`review`/`done`), assigned_to, reviewer, client_id, gmail_links, quoted_time, quoted_price, quoted_amf, comments, wait_hold_reason. Default status is `unassigned`.
 
 ### Files
 
@@ -133,6 +133,7 @@ zTicket-api/
    - `008_tickets_delete_policy.sql` — adds missing DELETE RLS policy for the tickets table
    - `009_add_wait_hold.sql` — renames `reserved` enum value to `wait_hold` and adds `wait_hold_reason` column
    - `010_add_status_updated_at.sql` — adds `status_updated_at` column; trigger updated to stamp it on every status change
+   - `011_replace_done_status.sql` — replaces `complete` and `sent` with a single `done` status; migrates existing data
 4. Create a storage bucket named `ticket-attachments` (private) and add RLS policies for authenticated users (SELECT, INSERT, DELETE).
 5. Add allowed email addresses to the `allowed_emails` table.
 
