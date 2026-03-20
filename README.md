@@ -2,6 +2,8 @@
 
 REST API for the zTicket internal ticketing system. Built with Hono on Node.js, backed by Supabase (PostgreSQL, Auth, Storage). Deployed to Railway. This repo includes the SQL used to set up the Supabase database for this project in the "database" directory even though this Railway deployment does not directly utilize these scripts (just to avoid having a separate repo just hosting SQL schema and migrations).
 
+The repo for the frontend of this application is here: https://github.com/Ian-MacGregor/zTicket
+
 ---
 
 ## Stack
@@ -26,17 +28,37 @@ All `/api/*` routes require an `Authorization: Bearer <supabase_access_token>` h
 
 ### Tickets
 
-| Method | Path              | Description                    |
-|--------|-------------------|--------------------------------|
-| GET    | `/api/tickets`    | List all tickets (with joins)  |
-| GET    | `/api/tickets/:id`| Get single ticket              |
-| POST   | `/api/tickets`    | Create ticket                  |
-| PATCH  | `/api/tickets/:id`| Update ticket                  |
-| DELETE | `/api/tickets/:id`| Delete ticket                  |
+| Method | Path                  | Description                              |
+|--------|-----------------------|------------------------------------------|
+| GET    | `/api/tickets/stats`  | Global ticket counts by status           |
+| GET    | `/api/tickets`        | List tickets (paginated, filtered)       |
+| GET    | `/api/tickets/:id`    | Get single ticket                        |
+| POST   | `/api/tickets`        | Create ticket                            |
+| PATCH  | `/api/tickets/:id`    | Update ticket                            |
+| DELETE | `/api/tickets/:id`    | Delete ticket                            |
 
 Ticket responses include joined data for `assignee`, `reviewer`, `creator`, `client`, and `files`.
 
-**Ticket fields:** title, description, priority (`low`/`medium`/`high`/`critical`), status (`unassigned`/`wait_hold`/`assigned`/`review`/`done`), assigned_to, reviewer, client_id, gmail_links, quoted_time, quoted_price, quoted_amf, comments, wait_hold_reason. Default status is `unassigned`.
+**`GET /api/tickets/stats`** — returns `{ total, unassigned, wait_hold, assigned, review, done }` reflecting the entire database regardless of any filters. Used by the dashboard stat cards.
+
+**`GET /api/tickets` query parameters:**
+
+| Parameter    | Default       | Description                                                   |
+|--------------|---------------|---------------------------------------------------------------|
+| `page`       | `1`           | Page number                                                   |
+| `limit`      | `10`          | Results per page (max 200)                                    |
+| `sort`       | `ref-desc`    | Sort key: `ref`, `title`, `status`, `priority`, `created`, `updated`, `client`, `owner` — each with `-asc` or `-desc` suffix |
+| `status`     | `all`         | Filter by status enum value, or `all`                         |
+| `priority`   | `all`         | Filter by priority enum value, or `all`                       |
+| `client`     | `all`         | Filter by client UUID, or `all`                               |
+| `view`       | `all`         | `my-tickets` or `my-reviews` (requires `userId`)             |
+| `userId`     | —             | Current user UUID; used for `my-tickets` / `my-reviews`      |
+| `search`     | —             | Search text                                                   |
+| `searchType` | `description` | `description`, `ref`, `client`, `assignee`, `reviewer`, `created`, `updated` |
+
+Response shape: `{ data: Ticket[], total: number }` where `total` is the untruncated filtered count (for pagination).
+
+**Ticket fields:** title, description, priority (`low`/`medium`/`high`/`critical`), status (`unassigned`/`wait_hold`/`assigned`/`review`/`done`), assigned_to, reviewer, client_id, gmail_links, quote_required, quoted_time, quoted_price, quoted_amf, comments, wait_hold_reason. Default status is `unassigned`.
 
 ### Files
 
@@ -133,7 +155,8 @@ zTicket-api/
    - `008_tickets_delete_policy.sql` — adds missing DELETE RLS policy for the tickets table
    - `009_add_wait_hold.sql` — renames `reserved` enum value to `wait_hold` and adds `wait_hold_reason` column
    - `010_add_status_updated_at.sql` — adds `status_updated_at` column; trigger updated to stamp it on every status change
-   - `011_replace_done_status.sql` — replaces `complete` and `sent` with a single `done` status; migrates existing data
+   - `011_replace_done_status.sql` — replaces `complete` and `sent` with a single `done` status; migrates existing data. **Note:** run `ALTER TABLE tickets ALTER COLUMN status DROP DEFAULT;` before dropping the type if your Supabase instance errors on `DROP TYPE`.
+   - `012_add_quote_required.sql` — adds `quote_required boolean NOT NULL DEFAULT false` column to tickets
 4. Create a storage bucket named `ticket-attachments` (private) and add RLS policies for authenticated users (SELECT, INSERT, DELETE).
 5. Add allowed email addresses to the `allowed_emails` table.
 
