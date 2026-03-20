@@ -10,6 +10,7 @@ import commentRoutes from "./routes/comments";
 import userRoutes from "./routes/users";
 import clientRoutes from "./routes/clients";
 import colorRoutes from "./routes/colors";
+import activityRoutes from "./routes/activity";
 
 const app = new Hono();
 
@@ -37,6 +38,7 @@ app.route("/api/tickets", commentRoutes);     // nested under /api/tickets/:tick
 app.route("/api/users", userRoutes);
 app.route("/api/clients", clientRoutes);
 app.route("/api/colors", colorRoutes);
+app.route("/api/activity", activityRoutes);
 
 // ─── START SERVER ───────────────────────────────────────────
 const port = parseInt(process.env.PORT || "3000", 10);

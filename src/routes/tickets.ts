@@ -4,6 +4,18 @@ import type { AppEnv } from "../types";
 
 const tickets = new Hono<AppEnv>();
 
+const STATUS_LABELS: Record<string, string> = {
+  unassigned: "Unassigned",
+  wait_hold:  "Wait/Hold",
+  assigned:   "Assigned",
+  review:     "Review",
+  done:       "Done",
+};
+
+async function logActivity(sb: any, ticketId: string, userId: string, action: string) {
+  await sb.from("ticket_activity").insert({ ticket_id: ticketId, user_id: userId, action }).catch(() => {});
+}
+
 const TICKET_SELECT = `
   *,
   assignee:assigned_to ( id, email, full_name ),
@@ -218,12 +230,14 @@ tickets.post("/", async (c) => {
     .single();
 
   if (error) return c.json({ error: error.message }, 400);
+  await logActivity(sb, data.id, user.id, "created ticket");
   return c.json(data, 201);
 });
 
 // ─── UPDATE TICKET ──────────────────────────────────────────
 tickets.patch("/:id", async (c) => {
   const token = c.get("token") as string;
+  const user  = c.get("user") as { id: string };
   const sb = supabaseForUser(token);
   const body = await c.req.json();
 
@@ -256,6 +270,19 @@ tickets.patch("/:id", async (c) => {
     .single();
 
   if (error) return c.json({ error: error.message }, 400);
+
+  // Derive a human-readable action from what changed
+  let action = "edited ticket";
+  if (!("title" in body)) {
+    if ("status" in body)
+      action = `set status to "${STATUS_LABELS[body.status] ?? body.status}"`;
+    else if ("reviewer" in body)
+      action = body.reviewer ? "assigned a reviewer" : "removed the reviewer";
+    else if ("assigned_to" in body)
+      action = body.assigned_to ? "assigned a developer" : "unassigned the developer";
+  }
+  await logActivity(sb, c.req.param("id"), user.id, action);
+
   return c.json(data);
 });
 
