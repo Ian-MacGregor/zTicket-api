@@ -58,7 +58,21 @@ Ticket responses include joined data for `assignee`, `reviewer`, `creator`, `cli
 
 Response shape: `{ data: Ticket[], total: number }` where `total` is the untruncated filtered count (for pagination).
 
-**Ticket fields:** title, description, priority (`low`/`medium`/`high`/`critical`), status (`unassigned`/`wait_hold`/`assigned`/`review`/`done`), assigned_to, reviewer, client_id, gmail_links, quote_required, quoted_time, quoted_price, quoted_amf, wait_hold_reason. Default status is `unassigned`.
+**Ticket fields:** title, description, priority (`low`/`medium`/`high`/`critical`), status (`unassigned`/`wait_hold`/`assigned`/`review`/`done`), assigned_to, reviewer, client_id, quote_required, quoted_time, quoted_price, quoted_amf, wait_hold_reason. Default status is `unassigned`.
+
+### Emails
+
+Stores Gmail message content imported by users directly into tickets. Email bodies are fetched client-side via the Gmail API and sent to this endpoint for storage, making them visible to all team members without requiring a shared Gmail account.
+
+| Method | Path                                         | Description                              |
+|--------|----------------------------------------------|------------------------------------------|
+| GET    | `/api/tickets/:id/emails`                    | List all imported emails for a ticket    |
+| POST   | `/api/tickets/:id/emails`                    | Import a Gmail message (store content)   |
+| DELETE | `/api/tickets/:id/emails/:emailId`           | Remove an imported email from a ticket   |
+
+Email responses include joined `importer` data (`id`, `full_name`, `email`). Emails are ordered by `received_at` descending. The POST endpoint uses upsert with `ON CONFLICT DO NOTHING` on `(ticket_id, gmail_message_id)` to safely handle duplicate imports.
+
+**POST body fields:** `gmail_message_id` (required), `gmail_thread_id`, `subject`, `from_email`, `from_name`, `to_email`, `snippet`, `body_html`, `body_text`, `received_at`.
 
 ### Comments
 
@@ -138,6 +152,7 @@ zTicket-api/
 │   │   └── auth.ts           # JWT verification middleware
 │   └── routes/
 │       ├── tickets.ts        # Ticket CRUD + activity logging
+│       ├── emails.ts         # Gmail message import/list/delete
 │       ├── comments.ts       # Forum-style per-user comments
 │       ├── files.ts          # File upload, download, zip, delete
 │       ├── users.ts          # User profile listing
@@ -160,7 +175,8 @@ zTicket-api/
 │       ├── 011_replace_done_status.sql
 │       ├── 012_add_quote_required.sql
 │       ├── 013_add_ticket_comments.sql
-│       └── 014_add_ticket_activity.sql
+│       ├── 014_add_ticket_activity.sql
+│       └── 015_add_ticket_emails.sql
 ├── Dockerfile
 ├── tsconfig.json
 ├── package.json
@@ -190,6 +206,7 @@ zTicket-api/
    - `012_add_quote_required.sql` — adds `quote_required boolean NOT NULL DEFAULT false` column to tickets
    - `013_add_ticket_comments.sql` — creates `ticket_comments` table with RLS; migrates any existing `tickets.comments` text into comment rows attributed to the ticket creator; drops the old `comments` column
    - `014_add_ticket_activity.sql` — creates `ticket_activity` table with RLS for the activity feed
+   - `015_add_ticket_emails.sql` — drops the old `gmail_links text[]` column from tickets; creates `ticket_emails` table with RLS to store imported Gmail message content (subject, sender, body, etc.) linked per ticket
 4. Create a storage bucket named `ticket-attachments` (private) and add RLS policies for authenticated users (SELECT, INSERT, DELETE).
 5. Add allowed email addresses to the `allowed_emails` table.
 
@@ -203,6 +220,7 @@ zTicket-api/
 | `ticket_files`     | File attachment metadata                                   |
 | `ticket_comments`  | Forum-style per-user comments; cascades on ticket delete   |
 | `ticket_activity`  | Activity log for the dashboard feed; cascades on ticket delete |
+| `ticket_emails`    | Imported Gmail message content linked to tickets; cascades on ticket delete |
 | `clients`          | Client companies                                           |
 | `client_contacts`  | Contacts per client                                        |
 | `color_settings`   | Per-user color customization (JSON blob)                   |
