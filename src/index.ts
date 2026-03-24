@@ -11,6 +11,7 @@ import userRoutes from "./routes/users";
 import clientRoutes from "./routes/clients";
 import colorRoutes from "./routes/colors";
 import activityRoutes from "./routes/activity";
+import emailRoutes from "./routes/emails";
 
 const app = new Hono();
 
@@ -35,6 +36,7 @@ app.use("/api/*", authMiddleware);
 app.route("/api/tickets", ticketRoutes);
 app.route("/api/tickets", fileRoutes);        // nested under /api/tickets/:ticketId/files
 app.route("/api/tickets", commentRoutes);     // nested under /api/tickets/:ticketId/comments
+app.route("/api/tickets", emailRoutes);       // nested under /api/tickets/:ticketId/emails
 app.route("/api/users", userRoutes);
 app.route("/api/clients", clientRoutes);
 app.route("/api/colors", colorRoutes);
