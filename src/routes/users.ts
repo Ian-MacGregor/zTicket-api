@@ -47,6 +47,8 @@ users.patch("/me", async (c) => {
     if (field in body) updates[field] = body[field];
   }
 
+  if (!Object.keys(updates).length) return c.json({ error: "No valid fields to update." }, 400);
+
   const { data, error } = await sb
     .from("profiles")
     .update(updates)
