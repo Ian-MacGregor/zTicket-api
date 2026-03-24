@@ -100,10 +100,13 @@ Files are stored in Supabase Storage (`ticket-attachments` bucket). Metadata is 
 
 ### Users
 
-| Method | Path            | Description           |
-|--------|-----------------|-----------------------|
-| GET    | `/api/users`    | List all user profiles|
-| GET    | `/api/users/me` | Current user profile  |
+| Method | Path              | Description                      |
+|--------|-------------------|----------------------------------|
+| GET    | `/api/users`      | List all user profiles           |
+| GET    | `/api/users/me`   | Current user profile             |
+| PATCH  | `/api/users/me`   | Update current user's profile    |
+
+**`PATCH /api/users/me` body fields:** `full_name`, `gmail_account`. Only these two fields are accepted; any others are ignored. Returns the updated profile row.
 
 ### Clients
 
@@ -131,11 +134,20 @@ Color settings are per-user. The PATCH endpoint uses upsert, so no row needs to 
 
 ### Activity
 
-| Method | Path            | Description                                      |
-|--------|-----------------|--------------------------------------------------|
-| GET    | `/api/activity` | Returns the 5 most recent ticket activity events |
+| Method | Path            | Description                          |
+|--------|-----------------|--------------------------------------|
+| GET    | `/api/activity` | Paginated ticket activity event log  |
 
-Response includes joined `ticket` (`ref_number`) and `actor` (`full_name`, `email`) data. Activity is logged automatically by the API on ticket create, ticket update, and comment create. Example action strings: `"created ticket"`, `"set status to \"Review\""`, `"added a comment"`, `"edited ticket"`.
+**Query parameters:**
+
+| Parameter | Default | Description                        |
+|-----------|---------|------------------------------------|
+| `page`    | `1`     | Page number                        |
+| `limit`   | `5`     | Results per page (max 200)         |
+
+Response shape: `{ data: ActivityEvent[], total: number }`. Each event includes `ticket_id` and joined `ticket` (`ref_number`) and `actor` (`full_name`, `email`) data. Activity is logged automatically by the API on ticket create, ticket update, and comment create. Example action strings: `"created ticket"`, `"set status to \"Review\""`, `"added a comment"`, `"edited ticket"`.
+
+The dashboard activity strip calls this endpoint with `limit=5` (default). The Activity page calls it with `limit=50` and supports full pagination.
 
 ---
 
@@ -158,7 +170,7 @@ zTicket-api/
 │       ├── users.ts          # User profile listing
 │       ├── clients.ts        # Client + contact CRUD
 │       ├── colors.ts         # Per-user color settings
-│       └── activity.ts       # Activity feed (recent 5 events)
+│       └── activity.ts       # Paginated activity feed
 ├── database/
 │   ├── schema.sql            # Initial database schema (run first)
 │   └── migrations/
@@ -176,7 +188,8 @@ zTicket-api/
 │       ├── 012_add_quote_required.sql
 │       ├── 013_add_ticket_comments.sql
 │       ├── 014_add_ticket_activity.sql
-│       └── 015_add_ticket_emails.sql
+│       ├── 015_add_ticket_emails.sql
+│       └── 016_add_gmail_account.sql
 ├── Dockerfile
 ├── tsconfig.json
 ├── package.json
@@ -207,6 +220,7 @@ zTicket-api/
    - `013_add_ticket_comments.sql` — creates `ticket_comments` table with RLS; migrates any existing `tickets.comments` text into comment rows attributed to the ticket creator; drops the old `comments` column
    - `014_add_ticket_activity.sql` — creates `ticket_activity` table with RLS for the activity feed
    - `015_add_ticket_emails.sql` — drops the old `gmail_links text[]` column from tickets; creates `ticket_emails` table with RLS to store imported Gmail message content (subject, sender, body, etc.) linked per ticket
+   - `016_add_gmail_account.sql` — adds `gmail_account text` column to `profiles` to persist each user's linked Google account email across sessions
 4. Create a storage bucket named `ticket-attachments` (private) and add RLS policies for authenticated users (SELECT, INSERT, DELETE).
 5. Add allowed email addresses to the `allowed_emails` table.
 
@@ -215,7 +229,7 @@ zTicket-api/
 | Table              | Purpose                                                    |
 |--------------------|------------------------------------------------------------|
 | `allowed_emails`   | Email allowlist for registration                           |
-| `profiles`         | User profiles (auto-created on signup)                     |
+| `profiles`         | User profiles (auto-created on signup); includes `gmail_account` for Gmail integration |
 | `tickets`          | All ticket data                                            |
 | `ticket_files`     | File attachment metadata                                   |
 | `ticket_comments`  | Forum-style per-user comments; cascades on ticket delete   |
