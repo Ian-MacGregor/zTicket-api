@@ -34,4 +34,28 @@ users.get("/me", async (c) => {
   return c.json(data);
 });
 
+// ─── UPDATE CURRENT USER PROFILE ───────────────────────────
+users.patch("/me", async (c) => {
+  const token = c.get("token") as string;
+  const user  = c.get("user") as { id: string };
+  const sb    = supabaseForUser(token);
+  const body  = await c.req.json();
+
+  const allowed = ["full_name", "gmail_account"];
+  const updates: Record<string, unknown> = {};
+  for (const field of allowed) {
+    if (field in body) updates[field] = body[field];
+  }
+
+  const { data, error } = await sb
+    .from("profiles")
+    .update(updates)
+    .eq("id", user.id)
+    .select()
+    .single();
+
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json(data);
+});
+
 export default users;
