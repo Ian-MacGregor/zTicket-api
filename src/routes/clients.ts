@@ -13,7 +13,7 @@ clients.get("/", async (c) => {
     .from("clients")
     .select(`
       *,
-      contacts:client_contacts ( id, name, email, phone, role, created_at )
+      contacts:client_contacts ( id, name, email, phone, phone2, role, distribute_code, created_at )
     `)
     .order("name");
 
@@ -30,7 +30,7 @@ clients.get("/:id", async (c) => {
     .from("clients")
     .select(`
       *,
-      contacts:client_contacts ( id, name, email, phone, role, created_at )
+      contacts:client_contacts ( id, name, email, phone, phone2, role, distribute_code, created_at )
     `)
     .eq("id", c.req.param("id"))
     .single();
@@ -99,7 +99,9 @@ clients.post("/:id/contacts", async (c) => {
       name: body.name,
       email: body.email || null,
       phone: body.phone || null,
+      phone2: body.phone2 || null,
       role: body.role || null,
+      distribute_code: body.distribute_code ?? false,
     })
     .select()
     .single();
@@ -115,7 +117,7 @@ clients.patch("/:id/contacts/:contactId", async (c) => {
   const body = await c.req.json();
 
   const updateFields: Record<string, unknown> = {};
-  for (const field of ["name", "email", "phone", "role"]) {
+  for (const field of ["name", "email", "phone", "phone2", "role", "distribute_code"]) {
     if (body[field] !== undefined) updateFields[field] = body[field];
   }
 
