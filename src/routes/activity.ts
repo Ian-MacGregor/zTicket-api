@@ -14,7 +14,7 @@ activity.get("/", async (c) => {
     .from("ticket_activity")
     .select(`
       id, ticket_id, action, created_at,
-      ticket:ticket_id ( ref_number ),
+      ticket:ticket_id ( ref_number, status, assigned_to, reviewer ),
       actor:user_id ( full_name, email )
     `, { count: "exact" })
     .order("created_at", { ascending: false })
