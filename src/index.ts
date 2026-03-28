@@ -20,7 +20,7 @@ app.use("*", logger());
 app.use(
   "*",
   cors({
-    origin: ["https://ian-macgregor.github.io"],
+    origin: ["https://ian-macgregor.github.io", "http://localhost:5173"],
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["Content-Disposition"],
