@@ -1,3 +1,24 @@
+/**
+ * routes/files.ts
+ *
+ * File attachment routes, all nested under /api/tickets/:ticketId/files.
+ * Files are stored in Supabase Storage (bucket: "ticket-attachments") with
+ * the path pattern `{ticketId}/{timestamp}_{originalName}`. Metadata
+ * (file name, size, MIME type, uploader) is also written to the
+ * `ticket_files` table so the ticket detail page can list attachments without
+ * hitting Storage directly.
+ *
+ * Endpoints:
+ *   POST   /:ticketId/files                       — upload one or more files (multipart/form-data)
+ *   GET    /:ticketId/files                       — list file metadata for a ticket
+ *   GET    /:ticketId/files/:fileId/download      — download a single file
+ *   GET    /:ticketId/files/download-all          — download all files as a ZIP archive
+ *   DELETE /:ticketId/files/:fileId               — delete a file from storage + DB
+ *
+ * Note: download-all must be registered before /:fileId/download so that the
+ * literal "download-all" segment is not matched as a fileId.
+ */
+
 import { Hono } from "hono";
 import { supabaseForUser, supabaseAdmin } from "../db/supabase";
 import archiver from "archiver";
@@ -6,9 +27,14 @@ import type { AppEnv } from "../types";
 
 const files = new Hono<AppEnv>();
 
+/** Supabase Storage bucket name for all ticket file attachments. */
 const BUCKET = "ticket-attachments";
 
 // ─── UPLOAD FILE(S) TO A TICKET ────────────────────────────
+// Accepts a multipart/form-data body where each form field value is a File.
+// Each file is uploaded to Storage then a metadata row is inserted into
+// ticket_files. Processes files sequentially so partial failures return
+// an error without leaving orphaned storage objects.
 files.post("/:ticketId/files", async (c) => {
   const token = c.get("token") as string;
   const user = c.get("user") as { id: string };
@@ -22,10 +48,12 @@ files.post("/:ticketId/files", async (c) => {
     if (!(value instanceof File)) continue;
 
     const file = value as File;
+    // Prefix the filename with a timestamp to avoid collisions when the same
+    // file name is uploaded multiple times to the same ticket.
     const filePath = `${ticketId}/${Date.now()}_${file.name}`;
     const arrayBuf = await file.arrayBuffer();
 
-    // Upload to Supabase Storage
+    // Upload the binary content to Supabase Storage.
     const { error: storageErr } = await sb.storage
       .from(BUCKET)
       .upload(filePath, arrayBuf, {
@@ -37,7 +65,7 @@ files.post("/:ticketId/files", async (c) => {
       return c.json({ error: `Upload failed: ${storageErr.message}` }, 500);
     }
 
-    // Record metadata in ticket_files
+    // Record file metadata in the database so it can be listed/downloaded later.
     const { data, error: dbErr } = await sb
       .from("ticket_files")
       .insert({
@@ -59,6 +87,8 @@ files.post("/:ticketId/files", async (c) => {
 });
 
 // ─── LIST FILES FOR A TICKET ───────────────────────────────
+// Returns metadata rows ordered newest-first. The frontend uses this list
+// to display file names and sizes; actual file content is fetched via /download.
 files.get("/:ticketId/files", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -74,6 +104,9 @@ files.get("/:ticketId/files", async (c) => {
 });
 
 // ─── DOWNLOAD SINGLE FILE ──────────────────────────────────
+// Looks up the file metadata to get the storage path, then streams the raw
+// bytes back with the original MIME type and a Content-Disposition header so
+// the browser treats it as a download.
 files.get("/:ticketId/files/:fileId/download", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -101,12 +134,15 @@ files.get("/:ticketId/files/:fileId/download", async (c) => {
 });
 
 // ─── DOWNLOAD ALL FILES AS ZIP ─────────────────────────────
+// Fetches every file for the ticket from Storage, streams them into an
+// in-memory ZIP archive via the `archiver` library, then returns the
+// completed buffer as a single attachment download.
 files.get("/:ticketId/files/download-all", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
   const ticketId = c.req.param("ticketId");
 
-  // Get all file metadata
+  // Fetch metadata for all files belonging to this ticket.
   const { data: fileList, error } = await sb
     .from("ticket_files")
     .select("*")
@@ -115,17 +151,19 @@ files.get("/:ticketId/files/download-all", async (c) => {
   if (error) return c.json({ error: error.message }, 500);
   if (!fileList?.length) return c.json({ error: "No files found" }, 404);
 
-  // Build a ZIP archive in memory
+  // Build a ZIP archive in memory using archiver's event-based streaming API.
   const archive = archiver("zip", { zlib: { level: 5 } });
   const chunks: Uint8Array[] = [];
 
   archive.on("data", (chunk: Uint8Array) => chunks.push(chunk));
 
+  // Resolve this promise once archiver signals it has finished writing.
   const archiveFinished = new Promise<void>((resolve, reject) => {
     archive.on("end", resolve);
     archive.on("error", reject);
   });
 
+  // Download each file from Storage and append it to the archive.
   for (const f of fileList) {
     const { data: blob } = await sb.storage.from(BUCKET).download(f.file_path);
     if (blob) {
@@ -148,6 +186,8 @@ files.get("/:ticketId/files/download-all", async (c) => {
 });
 
 // ─── DELETE A FILE ──────────────────────────────────────────
+// Deletes from both Storage and the ticket_files table. Fetches metadata first
+// to get the storage path — without it we cannot remove the object from the bucket.
 files.delete("/:ticketId/files/:fileId", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -160,10 +200,10 @@ files.delete("/:ticketId/files/:fileId", async (c) => {
 
   if (fetchErr || !fileMeta) return c.json({ error: "File not found" }, 404);
 
-  // Delete from storage
+  // Remove the binary object from the storage bucket.
   await sb.storage.from(BUCKET).remove([fileMeta.file_path]);
 
-  // Delete DB record
+  // Remove the metadata row from the database.
   const { error } = await sb
     .from("ticket_files")
     .delete()

@@ -1,3 +1,22 @@
+/**
+ * routes/clients.ts
+ *
+ * Client and contact management routes under /api/clients.
+ * Clients are organisations that tickets can be associated with. Each client
+ * can have multiple contacts (people at that organisation), stored in the
+ * `client_contacts` table.
+ *
+ * Endpoints:
+ *   GET    /                             — list all clients with their contacts
+ *   GET    /:id                          — get a single client with contacts
+ *   POST   /                             — create a client
+ *   PATCH  /:id                          — rename a client
+ *   DELETE /:id                          — delete a client (cascades to contacts)
+ *   POST   /:id/contacts                 — add a contact to a client
+ *   PATCH  /:id/contacts/:contactId      — update a contact (field whitelist)
+ *   DELETE /:id/contacts/:contactId      — delete a contact
+ */
+
 import { Hono } from "hono";
 import { supabaseForUser } from "../db/supabase";
 import type { AppEnv } from "../types";
@@ -5,6 +24,8 @@ import type { AppEnv } from "../types";
 const clients = new Hono<AppEnv>();
 
 // ─── LIST ALL CLIENTS (with contacts) ──────────────────────
+// Eagerly joins contacts so the ClientsPage can render the full hierarchy in
+// a single request. Ordered alphabetically by client name.
 clients.get("/", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -22,6 +43,7 @@ clients.get("/", async (c) => {
 });
 
 // ─── GET SINGLE CLIENT ─────────────────────────────────────
+// Returns the client row with its contacts. Returns 404 if not found.
 clients.get("/:id", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -56,6 +78,7 @@ clients.post("/", async (c) => {
 });
 
 // ─── UPDATE CLIENT ──────────────────────────────────────────
+// Currently only the name field is editable via this endpoint.
 clients.patch("/:id", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -73,6 +96,7 @@ clients.patch("/:id", async (c) => {
 });
 
 // ─── DELETE CLIENT ──────────────────────────────────────────
+// Database foreign key constraints cascade the delete to client_contacts rows.
 clients.delete("/:id", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -87,6 +111,8 @@ clients.delete("/:id", async (c) => {
 });
 
 // ─── ADD CONTACT TO CLIENT ──────────────────────────────────
+// Optional fields (email, phone, phone2, role) are coerced to null when
+// absent so the DB stores null rather than an empty string.
 clients.post("/:id/contacts", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -111,6 +137,8 @@ clients.post("/:id/contacts", async (c) => {
 });
 
 // ─── UPDATE CONTACT ─────────────────────────────────────────
+// Builds the update payload from a whitelist to prevent unintended column
+// writes. Only fields present in the request body are included.
 clients.patch("/:id/contacts/:contactId", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);

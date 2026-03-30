@@ -299,9 +299,9 @@ docker run -p 3000:3000 --env-file .env zticket-api
 2. Create a new Railway project → **Deploy from GitHub Repo**.
 3. Railway auto-detects the Dockerfile. Set the environment variables listed above.
 4. Deploy. Railway provides a public URL (e.g. `https://zticket-api-production.up.railway.app`).
-5. Update the CORS origin in `src/index.ts` to your GitHub Pages domain:
+5. Update the CORS origin in `src/index.ts` to your GitHub Pages domain. `http://localhost:5173` is included by default for local frontend development:
    ```ts
-   origin: ["https://your-username.github.io"]
+   origin: ["https://your-username.github.io", "http://localhost:5173"]
    ```
 
 The Dockerfile runs `npm install`, `tsc` to compile TypeScript, and starts the server with `node dist/index.js`.

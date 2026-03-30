@@ -1,3 +1,20 @@
+/**
+ * routes/emails.ts
+ *
+ * Gmail message import routes nested under /api/tickets/:ticketId/emails.
+ * Allows users to link Gmail messages to a ticket for context and reference.
+ * The full message body (HTML or plain text) is stored in the database so it
+ * remains accessible even if the original Gmail message is later deleted.
+ *
+ * Emails are keyed on (ticket_id, gmail_message_id) — importing the same
+ * message twice is silently de-duplicated via upsert with ignoreDuplicates.
+ *
+ * Endpoints:
+ *   GET    /:ticketId/emails             — list linked emails (newest received first)
+ *   POST   /:ticketId/emails             — import a Gmail message
+ *   DELETE /:ticketId/emails/:emailId    — unlink an email from the ticket
+ */
+
 import { Hono } from "hono";
 import { supabaseForUser } from "../db/supabase";
 import type { AppEnv } from "../types";
@@ -5,6 +22,8 @@ import type { AppEnv } from "../types";
 const emails = new Hono<AppEnv>();
 
 // ─── LIST EMAILS FOR A TICKET ───────────────────────────────
+// Returns linked emails ordered by received_at descending. Includes the
+// importer's profile so the UI can show who imported each message.
 emails.get("/:ticketId/emails", async (c) => {
   const sb = supabaseForUser(c.get("token") as string);
 
@@ -25,6 +44,10 @@ emails.get("/:ticketId/emails", async (c) => {
 });
 
 // ─── IMPORT AN EMAIL ────────────────────────────────────────
+// The client sends the full Gmail message payload (fetched client-side via the
+// Gmail API). Uses upsert with ignoreDuplicates so re-importing the same
+// message is a no-op rather than an error. Records imported_by so the UI can
+// show who linked the message.
 emails.post("/:ticketId/emails", async (c) => {
   const token = c.get("token") as string;
   const user  = c.get("user") as { id: string };
@@ -58,6 +81,9 @@ emails.post("/:ticketId/emails", async (c) => {
 });
 
 // ─── REMOVE AN EMAIL FROM A TICKET ─────────────────────────
+// Unlinks the email from the ticket (deletes the ticket_emails row).
+// The original Gmail message is not affected.
+// Both :emailId and :ticketId are matched to prevent cross-ticket deletions.
 emails.delete("/:ticketId/emails/:emailId", async (c) => {
   const sb = supabaseForUser(c.get("token") as string);
 

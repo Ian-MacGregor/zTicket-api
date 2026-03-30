@@ -1,15 +1,32 @@
+/**
+ * routes/comments.ts
+ *
+ * Comment thread routes nested under /api/tickets/:ticketId/comments.
+ * Each comment belongs to a ticket and is authored by the calling user.
+ * Users may only edit their own comments — ownership is enforced by Supabase
+ * Row Level Security on the ticket_comments table.
+ *
+ * Endpoints:
+ *   GET   /:ticketId/comments               — list all comments (oldest first)
+ *   POST  /:ticketId/comments               — add a comment + log activity
+ *   PATCH /:ticketId/comments/:commentId    — edit own comment body
+ */
+
 import { Hono } from "hono";
 import { supabaseForUser } from "../db/supabase";
 import type { AppEnv } from "../types";
 
 const comments = new Hono<AppEnv>();
 
+/** Select expression that joins the author's profile onto every comment row. */
 const COMMENT_SELECT = `
   *,
   author:user_id ( id, email, full_name )
 `;
 
 // ─── LIST COMMENTS FOR A TICKET ────────────────────────────
+// Returns comments in chronological order (oldest first) so the thread reads
+// top-to-bottom in the UI.
 comments.get("/:ticketId/comments", async (c) => {
   const sb = supabaseForUser(c.get("token") as string);
 
@@ -24,6 +41,10 @@ comments.get("/:ticketId/comments", async (c) => {
 });
 
 // ─── CREATE COMMENT ─────────────────────────────────────────
+// Validates that the body is non-empty, inserts the comment, then writes an
+// "added a comment" entry to ticket_activity. The activity insert is
+// fire-and-forget (errors are swallowed) so a logging failure never blocks
+// the response.
 comments.post("/:ticketId/comments", async (c) => {
   const sb   = supabaseForUser(c.get("token") as string);
   const user = c.get("user") as { id: string };
@@ -46,6 +67,10 @@ comments.post("/:ticketId/comments", async (c) => {
 });
 
 // ─── UPDATE OWN COMMENT (RLS enforces ownership) ───────────
+// Only the body field is updatable. The `updated_at` timestamp is managed by
+// a database trigger. RLS prevents users from editing comments they did not
+// author — the update will silently affect 0 rows if the caller does not own
+// the comment, which Supabase surfaces as an error.
 comments.patch("/:ticketId/comments/:commentId", async (c) => {
   const sb = supabaseForUser(c.get("token") as string);
   const { body } = await c.req.json();

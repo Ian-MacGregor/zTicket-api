@@ -1,9 +1,30 @@
+/**
+ * routes/tickets.ts
+ *
+ * Ticket CRUD routes and the global stats endpoint.
+ *
+ * Endpoints:
+ *   GET  /stats        — count of tickets grouped by status (unfiltered)
+ *   GET  /             — paginated, filtered, sorted ticket list
+ *   GET  /:id          — single ticket with all relations
+ *   POST /             — create a ticket
+ *   PATCH /:id         — partial update (whitelist of allowed fields)
+ *   DELETE /:id        — delete a ticket
+ *
+ * All mutating operations write a human-readable entry to ticket_activity so
+ * the activity feed reflects what changed.
+ *
+ * The /stats route must be registered before /:id to prevent "stats" from
+ * being matched as a ticket ID.
+ */
+
 import { Hono } from "hono";
 import { supabaseForUser } from "../db/supabase";
 import type { AppEnv } from "../types";
 
 const tickets = new Hono<AppEnv>();
 
+/** Maps internal status keys to display labels used in activity log entries. */
 const STATUS_LABELS: Record<string, string> = {
   unassigned: "Unassigned",
   wait_hold:  "Wait/Hold",
@@ -12,12 +33,18 @@ const STATUS_LABELS: Record<string, string> = {
   done:       "Done",
 };
 
+/**
+ * Writes a single row to the ticket_activity table.
+ * Failures are silently swallowed so a logging error never breaks the main
+ * request flow.
+ */
 async function logActivity(sb: any, ticketId: string, userId: string, action: string) {
   try {
     await sb.from("ticket_activity").insert({ ticket_id: ticketId, user_id: userId, action });
   } catch {}
 }
 
+// Full select with file attachments — used for single-ticket fetches and updates.
 const TICKET_SELECT = `
   *,
   assignee:assigned_to ( id, email, full_name ),
@@ -27,6 +54,7 @@ const TICKET_SELECT = `
   files:ticket_files   ( id, file_name, file_path, file_size, mime_type, created_at )
 `;
 
+// Lighter select without files — used on create to avoid an extra join.
 const TICKET_SELECT_NO_FILES = `
   *,
   assignee:assigned_to ( id, email, full_name ),
@@ -36,6 +64,9 @@ const TICKET_SELECT_NO_FILES = `
 `;
 
 // ─── STATS (must be before /:id) ───────────────────────────
+// Fetches only the status column for all tickets and aggregates the counts
+// in application code. Returns { total, unassigned, wait_hold, assigned,
+// review, done }.
 tickets.get("/stats", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -54,6 +85,9 @@ tickets.get("/stats", async (c) => {
 });
 
 // ─── LIST TICKETS (server-side filtered, sorted, paginated) ─
+// Accepts query params: page, limit, sort, status, priority, client, view,
+// userId, search, searchType. All filters are optional and default to "all"
+// (no filter applied). Limit is capped at 200 to prevent runaway queries.
 tickets.get("/", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -72,6 +106,7 @@ tickets.get("/", async (c) => {
   let query = sb.from("tickets").select(TICKET_SELECT, { count: "exact" });
 
   // ── Status filter ──────────────────────────────────────
+  // Supports comma-separated values (e.g. "assigned,review" for the "active" preset).
   if (status !== "all") {
     const statuses = status.split(",").map((s) => s.trim()).filter(Boolean);
     if (statuses.length === 1) query = query.eq("status", statuses[0]);
@@ -85,6 +120,9 @@ tickets.get("/", async (c) => {
   if (clientId !== "all") query = query.eq("client_id", clientId);
 
   // ── View filter (my-tickets / my-reviews) ─────────────
+  // "my-tickets" restricts to tickets assigned to the calling user, limited to
+  // active statuses. "my-reviews" restricts to tickets in review where the
+  // caller is the reviewer. Incompatible status combinations return empty early.
   if (view === "my-tickets" && userId) {
     query = query.eq("assigned_to", userId);
     const myStatuses = ["wait_hold", "assigned", "review"];
@@ -103,6 +141,9 @@ tickets.get("/", async (c) => {
   }
 
   // ── Search filter ──────────────────────────────────────
+  // searchType determines which column(s) are searched. For relational searches
+  // (client, assignee, reviewer) we first resolve matching IDs with a separate
+  // query and return empty if no matches are found, avoiding a full-table scan.
   if (search) {
     switch (searchType) {
       case "description":
@@ -135,6 +176,7 @@ tickets.get("/", async (c) => {
         break;
       }
       case "created": {
+        // Matches tickets created on the given calendar day (local time boundaries).
         const d = new Date(search);
         if (!isNaN(d.getTime())) {
           const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
@@ -144,6 +186,7 @@ tickets.get("/", async (c) => {
         break;
       }
       case "updated": {
+        // Matches tickets whose status was last updated on the given calendar day.
         const d = new Date(search);
         if (!isNaN(d.getTime())) {
           const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
@@ -158,6 +201,8 @@ tickets.get("/", async (c) => {
   // ── Sort ───────────────────────────────────────────────
   // ticket_priority enum order: low, medium, high, critical (ascending = low→critical)
   // ticket_status enum order: unassigned, wait_hold, assigned, review, done
+  // owner sort uses assignee name as the proxy column (reviewer vs assignee
+  // distinction is handled in the UI only).
   switch (sort) {
     case "ref-asc":       query = query.order("ref_number",       { ascending: true  }); break;
     case "ref-desc":      query = query.order("ref_number",       { ascending: false }); break;
@@ -190,6 +235,8 @@ tickets.get("/", async (c) => {
 });
 
 // ─── GET SINGLE TICKET ─────────────────────────────────────
+// Returns the full ticket record including files, assignee, reviewer, creator,
+// and client relations. Returns 404 if the ticket is not found.
 tickets.get("/:id", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
@@ -205,6 +252,8 @@ tickets.get("/:id", async (c) => {
 });
 
 // ─── CREATE TICKET ──────────────────────────────────────────
+// Sets created_by to the calling user's ID. Returns 201 with the new ticket
+// (without files — no files exist yet). Logs a "created ticket" activity entry.
 tickets.post("/", async (c) => {
   const token = c.get("token") as string;
   const user = c.get("user") as { id: string };
@@ -236,6 +285,10 @@ tickets.post("/", async (c) => {
 });
 
 // ─── UPDATE TICKET ──────────────────────────────────────────
+// Only fields present in allowedFields are written; unknown body keys are
+// ignored to prevent accidental column overwrites. The activity action is
+// derived from which fields changed so the log reads naturally ("set status
+// to Assigned" rather than "edited ticket").
 tickets.patch("/:id", async (c) => {
   const token = c.get("token") as string;
   const user  = c.get("user") as { id: string };
@@ -258,6 +311,7 @@ tickets.patch("/:id", async (c) => {
     "wait_hold_reason",
   ];
 
+  // Build the update payload from only the whitelisted fields present in the body.
   for (const field of allowedFields) {
     if (body[field] !== undefined) updateFields[field] = body[field];
   }
@@ -271,7 +325,8 @@ tickets.patch("/:id", async (c) => {
 
   if (error) return c.json({ error: error.message }, 400);
 
-  // Derive a human-readable action from what changed
+  // Derive a human-readable action from what changed for the activity log.
+  // Priority: status change > reviewer change > assignee change > generic edit.
   let action = "edited ticket";
   if (!("title" in body)) {
     if ("status" in body)
@@ -287,6 +342,8 @@ tickets.patch("/:id", async (c) => {
 });
 
 // ─── DELETE TICKET ──────────────────────────────────────────
+// Hard-deletes the ticket. Cascading deletes for files, comments, emails, and
+// activity records are handled at the database level via foreign key constraints.
 tickets.delete("/:id", async (c) => {
   const token = c.get("token") as string;
   const sb = supabaseForUser(token);
