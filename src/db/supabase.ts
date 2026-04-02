@@ -32,9 +32,19 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
  * as the Authorization header, enabling RLS to enforce row-level permissions.
  * A new client instance is created for every request so tokens are never
  * shared across requests.
+ *
+ * auth options are explicitly disabled because this is a short-lived
+ * server-side client: without them the GoTrueClient would start a
+ * setInterval auto-refresh timer that holds the instance in memory
+ * indefinitely and causes steady heap growth (~70 MB/day).
  */
 export function supabaseForUser(accessToken: string) {
   return createClient(supabaseUrl, process.env.SUPABASE_ANON_KEY!, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
   });
 }
